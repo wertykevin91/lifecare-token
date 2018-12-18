@@ -1,0 +1,27 @@
+{
+  "name": "lifecare-token",
+  "version": "1.0.0",
+  "description": "LifeCare Token",
+  "main": "contracts",
+  "directories": {
+    "test": "test",
+    "migrations": "migrations"
+  },
+  "scripts": {
+    "test": "truffle test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wertykevin91/lifecare-token.git"
+  },
+  "author": "wertykevin91",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/wertykevin91/lifecare-token"
+  },
+  "homepage": "https://github.com/wertykevin91/lifecare-token",
+  "dependencies": {
+    "bignumber.js": "^8.0.1",
+    "truffle-hdwallet-provider": "0.0.6"
+  }
+}

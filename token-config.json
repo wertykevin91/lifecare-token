@@ -1,0 +1,8 @@
+{
+    "tokenName": "LifeCare Token",
+    "tokenSymbol": "LCt",
+    "tokenDecimals": 18,
+    "tokenTotalSupply": 220000000,
+    "tokenRaiseAmountUSD": 5000000,
+    "ethPriceUSD": 94
+}
