@@ -21,7 +21,6 @@ module.exports = function(deployer, network, accounts){
 
     deployer.deploy(safeMath);
     deployer.link(safeMath, tokenContract);
-
     deployer.deploy(tokenContract, 
         tokenConfig.tokenName, tokenConfig.tokenDecimals, tokenConfig.tokenSymbol, tokenConfig.tokenTotalSupply
     ).then(function(instance){
