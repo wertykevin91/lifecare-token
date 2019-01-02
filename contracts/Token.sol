@@ -15,6 +15,19 @@ contract ERC20 {
     event Approval(address indexed _owner, address indexed _spender, uint256 _value);
 }
 
+contract contractInterface {
+    function hasSupportFor(address, uint256, bytes memory) public returns (bool);
+}
+
+contract delegableTokenInterface {
+    bytes public constant signingPrefix = "\x19Ethereum Signed Message:\n32";
+    bytes4 public constant signedTransferSig = "\x75\x32\xea\xac";
+
+    function signedTransferHash(address, address, uint, uint, uint) public view returns (bytes32);
+    function signedTransfer(address, address, uint, uint, uint, bytes memory, address) public returns (bool);
+    function signedTransferCheck(address, address, uint, uint, uint, bytes memory, address) public view returns (string memory);
+}
+
 
 contract Owned {
     address public owner;
@@ -102,8 +115,106 @@ contract StandardToken is ERC20 {
     }
 }
 
+
+contract delegableToken is StandardToken, delegableTokenInterface {
+    mapping(address => uint) internal nextNonce;
+
+    function getNextNonce(address _owner) public view returns (uint) {
+        return nextNonce[_owner];
+    }
+
+
+    /**
+     * Prevalidation - Checks nonce value, signing account/parameter mismatch, balance sufficient for transfer 
+     */    
+    function signedTransferCheck(address from, address to, uint transferAmount, uint fee,
+                                    uint nonce, bytes memory sig, address feeAccount) public view returns (string memory result) {
+        bytes32 hash = signedTransferHash(from, to, transferAmount, fee, nonce);
+        if (nextNonce[from] != nonce)
+            return "Nonce does not match.";
+        if (from == address(0) || from != ecrecoverFromSig(keccak256(abi.encodePacked(signingPrefix, hash)), sig))
+            return "Mismatch in signing account or parameter mismatch.";
+        if (transferAmount > balances[from])
+            return "Transfer amount exceeds token balance on address.";
+        if (transferAmount.add(fee) > balances[from])
+            return "Insufficient tokens to pay for fees.";
+        if (balances[feeAccount] + fee < balances[feeAccount])
+            return "Overflow error.";
+        return "All checks cleared";
+    }
+
+    // ------------------------------------------------------------------------
+    // ecrecover from a signature rather than the signature in parts [v, r, s]
+    // The signature format is a compact form {bytes32 r}{bytes32 s}{uint8 v}.
+    // Compact means, uint8 is not padded to 32 bytes.
+    //
+    // An invalid signature results in the address(0) being returned, make
+    // sure that the returned result is checked to be non-zero for validity
+    //
+    // Parts from https://gist.github.com/axic/5b33912c6f61ae6fd96d6c4a47afde6d
+    // ------------------------------------------------------------------------
+    function ecrecoverFromSig(bytes32 hash, bytes memory sig) public pure returns (address recoveredAddress) {
+        bytes32 r;
+        bytes32 s;
+        uint8 v;
+        if (sig.length != 65) return address(0);
+        assembly {
+            r := mload(add(sig, 32))
+            s := mload(add(sig, 64))
+            // Here we are loading the last 32 bytes. We exploit the fact that 'mload' will pad with zeroes if we overread.
+            // There is no 'mload8' to do this, but that would be nicer.
+            v := byte(0, mload(add(sig, 96)))
+        }
+        // Albeit non-transactional signatures are not specified by the YP,
+        // one would expect it to match the YP range of [27, 28]
+        // geth uses [0, 1] and some clients have followed. This might change,
+        // see https://github.com/ethereum/go-ethereum/issues/2053
+        if (v < 27) {
+          v += 27;
+        }
+        if (v != 27 && v != 28) return address(0);
+        return ecrecover(hash, v, r, s);
+    }
+
+
+    /**
+     * Creates keccak256 hash of sent parameters
+     */    
+    function signedTransferHash(address from, address to, uint transferAmount, uint fee,
+                                    uint nonce) public view returns (bytes32 hash) {
+        hash = keccak256(
+            abi.encodePacked(signedTransferSig, address(this), from, to, transferAmount, fee, nonce)
+                        );
+    }
+
+    /**
+     * executes signedTransfer, allowing tokens to be sent through a delegate
+     */    
+    function signedTransfer(address from, address to, uint transferAmount, uint fee,
+                            uint nonce, bytes memory sig, address feeAccount) public returns (bool success) {
+        bytes32 hash = signedTransferHash(from, to, transferAmount, fee, nonce);
+        // verifies if signature is indeed signed by owner, and with the same values
+        require(from != address(0) && from == ecrecoverFromSig(keccak256(abi.encodePacked(signingPrefix, hash)), sig));
+        require(nextNonce[from] == nonce);
+
+        // update nonce
+        nextNonce[from] = nonce + 1;
+
+        // transfer tokens
+        balances[from] = balances[from].sub(transferAmount);
+        balances[to] = balances[to].add(transferAmount);
+        emit Transfer(from, to, transferAmount);
+        
+        // transfer fees
+        balances[from] = balances[from].sub(fee);
+        balances[feeAccount] = balances[feeAccount].add(fee);
+        emit Transfer(from, feeAccount, fee);
+        return true;
+    }
+}
+
 //token contract
-contract Token is Owned, StandardToken {
+contract Token is Owned, delegableToken {
     
     event Burn(address indexed burner, uint256 value);
     
@@ -111,21 +222,27 @@ contract Token is Owned, StandardToken {
     string public name;                   
     uint8 public decimals;                
     string public symbol;                 
-    uint256 private totalSupply_;
+    uint256 private _totalSupply;
     address public distributionAddress;
     bool public isTransferable = false;
     
 
-    constructor(string memory _name, uint8 _decimals, string memory _symbol, uint256 _totalSupply) public {
+    constructor(string memory _name, uint8 _decimals, string memory _symbol, uint256 _ttlSupply) public {
         name = _name;                          
         decimals = _decimals; 
         symbol = _symbol;
-        totalSupply_ = _totalSupply * 10 ** uint256(decimals); 
+        _totalSupply = _ttlSupply * 10 ** uint256(decimals); 
         owner = msg.sender;
 
         //transfer all to handler address
-        balances[msg.sender] = totalSupply_;
-        emit Transfer(address(0x0), msg.sender, totalSupply_);
+        balances[msg.sender] = _totalSupply;
+        emit Transfer(address(0x0), msg.sender, _totalSupply);
+    }
+
+    function signedTransfer(address _tokenOwner, address _to, uint _tokens, uint _fee, uint _nonce, bytes memory _sig,
+                            address _feeAccount) public returns (bool) {
+        require(isTransferable);
+        return super.signedTransfer(_tokenOwner, _to, _tokens, _fee, _nonce, _sig, _feeAccount);
     }
 
     function transfer(address _to, uint256 _value) public returns (bool) {
@@ -137,13 +254,53 @@ contract Token is Owned, StandardToken {
         require(isTransferable);
         return super.transferFrom(_from, _to, _value);
     } 
+    
+    function transferHasSupportFor(address _to, uint256 _value, bytes memory _data) public returns (bool) {
+        uint codeLength;
+        
+        require(isTransferable);
+        require(super.transfer(_to, _value));
+        assembly {
+            // retrieve code where tokens are sent tokens
+            // if code exists, we are interfacing with an external contract
+            codeLength := extcodesize(_to)
+        }
+
+        // call contract to see if it implements hasSupportFor
+        // _data should specify the function signature and signature parameters
+        if(codeLength > 0) {
+            contractInterface receiver = contractInterface(_to);
+            receiver.hasSupportFor(msg.sender, _value, _data);
+        }
+    }
+    
+    function signedtransferHasSupportFor(address _tokenOwner, address _to, uint _tokens, uint _fee, uint _nonce, bytes memory _sig,
+                            address _feeAccount, bytes memory _data) public returns (bool) {
+        uint codeLength;
+        require(isTransferable);
+        require(super.signedTransfer(_tokenOwner, _to, _tokens, _fee, _nonce, _sig, _feeAccount));
+        
+        assembly {
+            // retrieve code where tokens are sent tokens
+            // if code exists, we are interfacing with an external contract
+            codeLength := extcodesize(_to)
+        }
+        
+        // call contract to see if it implements hasSupportFor
+        // _data should specify the function signature and signature parameters
+        if(codeLength > 0) {
+            contractInterface receiver = contractInterface(_to);
+            receiver.hasSupportFor(_tokenOwner, _tokens, _data);
+        }
+    }
+    
 
     /**
      * Get totalSupply of tokens - Minus any from address 0 if that was used as a burnt method
      * Suggested way is still to use the burnSent function
      */    
     function totalSupply() public view returns (uint256) {
-        return totalSupply_;
+        return _totalSupply;
     }
 
     /**
@@ -163,7 +320,7 @@ contract Token is Owned, StandardToken {
 
         address burner = msg.sender;
         balances[burner] = balances[burner].sub(_value);
-        totalSupply_ = totalSupply_.sub(_value);
+        _totalSupply = _totalSupply.sub(_value);
         emit Burn(burner, _value);
     }
 
