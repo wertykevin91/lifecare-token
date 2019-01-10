@@ -2,6 +2,10 @@ const tokenContract = artifacts.require('./Token.sol');
 const safeMath = artifacts.require('./SafeMath.sol');
 const crowdSalesContract = artifacts.require('./TokenCrowdSale.sol');
 const tokenTimelockContract = artifacts.require('./TokenTimelock.sol');
+// Contract Interface
+const supportedContract = artifacts.require("./support-for-contracts/SupportedContract.sol");
+const notSupportedContract = artifacts.require("./support-for-contracts/NotSupportedContract.sol");
+
 const fs = require("fs");
 const path = require("path");
 const tokenConfig = JSON.parse(fs.readFileSync(path.join(__dirname, '../token-config.json'), 'utf-8'));
@@ -37,5 +41,11 @@ module.exports = function(deployer, network, accounts){
     }).then(function(){
         // deploy timelock
         return deployer.deploy(tokenTimelockContract, tokenContract.address, accounts[0], days365);
+    }).then(function(){
+        // deploy supported contract
+        return deployer.deploy(supportedContract);
+    }).then(function(){
+        // deploy not supported contract
+        return deployer.deploy(notSupportedContract);
     });
 }
