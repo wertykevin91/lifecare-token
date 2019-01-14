@@ -50,8 +50,8 @@ contract('supported contract', async(accounts) => {
         let nb2 = await tokenContract.balanceOf.call(to);
         let nb3 = await tokenContract.balanceOf.call(feeAccount);
 
-        console.log(nb1);
-        console.log(amountToTransfer)
+        //console.log(nb1);
+        //console.log(amountToTransfer)
 
         assert.strictEqual((new BigNumber(nb1.toString())).toString(), amountToTransferPlusFees.minus(amountToTransfer).minus(fee).toString(), "Invalid acc 1 balance");
         assert.strictEqual((new BigNumber(nb2.toString())).toString(), amountToTransfer.plus(amountToTransfer).toString(), "Invalid acc 2 balance");
