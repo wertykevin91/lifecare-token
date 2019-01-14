@@ -17,8 +17,9 @@ contract('supported contract', async(accounts) => {
         // transfer some tokens to account 2 and 3 before running tests
 
         const amountToTransfer = (new BigNumber(500)).times((new BigNumber(10).pow(new BigNumber(18))));
+        const amountToTransferPlusFees = (new BigNumber(505)).times((new BigNumber(10).pow(new BigNumber(18))));
         await tokenContract.transfer(accounts[1], web3.utils.toBN(amountToTransfer));
-        await tokenContract.transfer(accounts[2], web3.utils.toBN(amountToTransfer));
+        await tokenContract.transfer(accounts[2], web3.utils.toBN(amountToTransferPlusFees));
         
         // transfer to a supported contract
         // 1. transfer
@@ -33,26 +34,27 @@ contract('supported contract', async(accounts) => {
         // 2. signed transfer
         // refer to bulk transfer tests
         
-        // let from = accounts[2];
-        // let to = accounts[3];
+        let from = accounts[2];
+        let to = supportedContract.address;
         
-        // let feeAccount = accounts[5];
-        // let nonce = await tokenContract.getNextNonce.call(accounts[2]);
-        // let fee = (new BigNumber(5)).times((new BigNumber(10).pow(new BigNumber(18))));
-        // let hash = await tokenContract.signedTransferHash.call(from, to, amountToTransfer.toString(), fee.toString(), web3.utils.toBN(nonce));
-        // let signedHash = await web3.eth.sign(hash, accounts[2]);
+        let feeAccount = accounts[5];
+        let nonce = await tokenContract.getNextNonce.call(accounts[2]);
+        let fee = (new BigNumber(5)).times((new BigNumber(10).pow(new BigNumber(18))));
+        let hash = await tokenContract.signedTransferHash.call(from, to, amountToTransfer.toString(), fee.toString(), web3.utils.toBN(nonce));
+        let signedHash = await web3.eth.sign(hash, accounts[2]);
 
-        // await tokenContract.signedTransferHasSupportFor(from, to, amountToTransfer.toString(), fee.toString(), nonce.toNumber(), signedHash, feeAccount, {from: accounts[5]});
+        await tokenContract.signedTransferHasSupportFor(from, to, amountToTransfer.toString(), fee.toString(), nonce.toNumber(), signedHash, feeAccount, web3.utils.asciiToHex(""), {from: accounts[5]});
         
-        // // check balances after signed transfer
-        // let nb1 = await tokenContract.balanceOf.call(accounts[2]);
-        // let nb2 = await tokenContract.balanceOf.call(accounts[3]);
-        // let nb3 = await tokenContract.balanceOf.call(accounts[5]);
+        // check balances after signed transfer
+        let nb1 = await tokenContract.balanceOf.call(from);
+        let nb2 = await tokenContract.balanceOf.call(to);
+        let nb3 = await tokenContract.balanceOf.call(feeAccount);
 
-        // console.log(nb1.toString());
+        console.log(nb1);
+        console.log(amountToTransfer)
 
-        // assert.strictEqual(nb1.toFixed(), totalSupply.minus(amount).minus(fee).toString(), "Invalid acc 1 balance");
-        // assert.strictEqual(nb2.toFixed(), amount.toString(), "Invalid acc 2 balance");
-        // assert.strictEqual(nb3.toFixed(), fee.toString(), "Invalid acc 3 balance");
+        assert.strictEqual((new BigNumber(nb1.toString())).toString(), amountToTransferPlusFees.minus(amountToTransfer).minus(fee).toString(), "Invalid acc 1 balance");
+        assert.strictEqual((new BigNumber(nb2.toString())).toString(), amountToTransfer.plus(amountToTransfer).toString(), "Invalid acc 2 balance");
+        assert.strictEqual((new BigNumber(nb3.toString())).toString(), fee.toString(), "Invalid acc 3 balance");
     });
 });

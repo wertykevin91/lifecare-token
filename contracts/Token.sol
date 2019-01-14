@@ -274,7 +274,7 @@ contract Token is Owned, delegableToken {
         }
     }
     
-    function signedtransferHasSupportFor(address _tokenOwner, address _to, uint _tokens, uint _fee, uint _nonce, bytes memory _sig,
+    function signedTransferHasSupportFor(address _tokenOwner, address _to, uint _tokens, uint _fee, uint _nonce, bytes memory _sig,
                             address _feeAccount, bytes memory _data) public returns (bool) {
         uint codeLength;
         require(isTransferable);
